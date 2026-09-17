@@ -35,39 +35,18 @@ function isYouTubeUrl(value) {
 // =================================
 // YT-DLP
 // =================================
-
 function runYtDlp(args) {
   return new Promise((resolve, reject) => {
-    const secretCookieFile = "/etc/secrets/cookies.txt";
-    const writableCookieFile = path.join(
-      os.tmpdir(),
-      "subly-cookies.txt"
-    );
+    const providerScript =
+      "/opt/bgutil-ytdlp-pot-provider/server/build/generate_once.js";
 
-    let finalArgs = [...args];
-
-    if (fs.existsSync(secretCookieFile)) {
-      try {
-        fs.copyFileSync(
-          secretCookieFile,
-          writableCookieFile
-        );
-
-        finalArgs = [
-          "--cookies",
-          writableCookieFile,
-          ...finalArgs
-        ];
-      } catch (err) {
-        reject(
-          new Error(
-            "Cookie файл ашиглах үед алдаа гарлаа: " +
-            err.message
-          )
-        );
-        return;
-      }
-    }
+    const finalArgs = [
+      "--extractor-args",
+      `youtubepot-bgutilscript:script_path=${providerScript}`,
+      "--extractor-args",
+      "youtube:player-client=mweb",
+      ...args
+    ];
 
     const child = spawn("yt-dlp", finalArgs, {
       windowsHide: true
