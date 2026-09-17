@@ -41,6 +41,7 @@ function runYtDlp(args) {
       "/opt/bgutil-ytdlp-pot-provider/server/build/generate_once.js";
 
     const finalArgs = [
+      "--verbose",
       "--extractor-args",
       `youtubepot-bgutilscript:script_path=${providerScript}`,
       "--extractor-args",
