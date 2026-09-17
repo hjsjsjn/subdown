@@ -8,13 +8,19 @@ RUN apt-get update && \
     python3-venv \
     ca-certificates \
     git \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Create Python virtual environment
 RUN python3 -m venv /opt/yt-dlp
 
-# Install yt-dlp + EJS support
 RUN /opt/yt-dlp/bin/pip install --no-cache-dir -U "yt-dlp[default]"
+
+# Install Deno for yt-dlp YouTube JavaScript challenges
+RUN curl -fsSL https://deno.land/install.sh | sh
+
+ENV PATH="/root/.deno/bin:${PATH}"
 
 # Make yt-dlp available globally
 RUN ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp
