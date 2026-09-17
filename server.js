@@ -16,37 +16,86 @@ function isYouTubeUrl(value) {
   try {
     const u = new URL(value);
     const host = u.hostname.toLowerCase();
+
     return (
-      ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"].includes(host)
+      [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be",
+        "www.youtu.be"
+      ].includes(host)
     );
   } catch {
     return false;
   }
 }
 
+
+// =================================
+// YT-DLP
+// =================================
+
 function runYtDlp(args) {
   return new Promise((resolve, reject) => {
-    const child = spawn("yt-dlp", args, { windowsHide: true });
+
+    // Render Secret File ашиглаж байгаа үед
+    // /etc/secrets/cookies.txt файлыг автоматаар ашиглана.
+    // cookies.txt файлыг GitHub repository-д хийх шаардлагагүй.
+    const cookieFile = "/etc/secrets/cookies.txt";
+
+    if (fs.existsSync(cookieFile)) {
+      args = ["--cookies", cookieFile, ...args];
+    }
+
+    const child = spawn("yt-dlp", args, {
+      windowsHide: true
+    });
+
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", d => stdout += d.toString());
-    child.stderr.on("data", d => stderr += d.toString());
+    child.stdout.on("data", d => {
+      stdout += d.toString();
+    });
+
+    child.stderr.on("data", d => {
+      stderr += d.toString();
+    });
 
     child.on("error", err => {
       if (err.code === "ENOENT") {
-        reject(new Error("yt-dlp суусангүй байна. README.md дээрх зааврыг дагана уу."));
+        reject(
+          new Error(
+            "yt-dlp суусангүй байна. README.md дээрх зааврыг дагана уу."
+          )
+        );
       } else {
         reject(err);
       }
     });
 
     child.on("close", code => {
-      if (code !== 0) reject(new Error(stderr.trim() || "yt-dlp алдаа өглөө."));
-      else resolve({ stdout, stderr });
+      if (code !== 0) {
+        reject(
+          new Error(
+            stderr.trim() || "yt-dlp алдаа өглөө."
+          )
+        );
+      } else {
+        resolve({
+          stdout,
+          stderr
+        });
+      }
     });
   });
 }
+
+
+// =================================
+// CLEAN TITLE
+// =================================
 
 function cleanTitle(title) {
   return (title || "youtube-subtitles")
@@ -55,37 +104,80 @@ function cleanTitle(title) {
     .slice(0, 100) || "youtube-subtitles";
 }
 
+
+// =================================
+// VTT → SRT
+// =================================
+
 function vttToSrt(vtt) {
-  const lines = vtt.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const lines = vtt
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/);
+
   const out = [];
   let counter = 1;
   let i = 0;
 
   while (i < lines.length) {
+
     const line = lines[i].trim();
 
-    if (!line || line === "WEBVTT" || line.startsWith("NOTE") || line.startsWith("STYLE") || line.startsWith("REGION")) {
+    if (
+      !line ||
+      line === "WEBVTT" ||
+      line.startsWith("NOTE") ||
+      line.startsWith("STYLE") ||
+      line.startsWith("REGION")
+    ) {
       i++;
       continue;
     }
 
-    if (/^\d+$/.test(line) && i + 1 < lines.length && lines[i + 1].includes("-->")) {
+    if (
+      /^\d+$/.test(line) &&
+      i + 1 < lines.length &&
+      lines[i + 1].includes("-->")
+    ) {
       i++;
     }
 
-    if (lines[i] && lines[i].includes("-->")) {
-      const timing = lines[i].trim().replace(/\./g, ",");
+    if (
+      lines[i] &&
+      lines[i].includes("-->")
+    ) {
+
+      const timing = lines[i]
+        .trim()
+        .replace(/\./g, ",");
+
       i++;
+
       const text = [];
 
-      while (i < lines.length && lines[i].trim() !== "") {
-        if (!/^[A-Z-]+:/.test(lines[i].trim())) text.push(lines[i].trim());
+      while (
+        i < lines.length &&
+        lines[i].trim() !== ""
+      ) {
+
+        if (
+          !/^[A-Z-]+:/.test(
+            lines[i].trim()
+          )
+        ) {
+          text.push(
+            lines[i].trim()
+          );
+        }
+
         i++;
       }
 
       if (text.length) {
-        out.push(`${counter++}\n${timing}\n${text.join("\n")}\n`);
+        out.push(
+          `${counter++}\n${timing}\n${text.join("\n")}\n`
+        );
       }
+
     } else {
       i++;
     }
@@ -94,14 +186,25 @@ function vttToSrt(vtt) {
   return out.join("\n");
 }
 
+
+// =================================
+// SUBTITLE INFORMATION
+// =================================
+
 app.post("/api/subtitles", async (req, res) => {
-  const url = String(req.body?.url || "").trim();
+
+  const url = String(
+    req.body?.url || ""
+  ).trim();
 
   if (!isYouTubeUrl(url)) {
-    return res.status(400).json({ error: "Зөвхөн YouTube-ийн линк оруулна уу." });
+    return res.status(400).json({
+      error: "Зөвхөн YouTube-ийн линк оруулна уу."
+    });
   }
 
   try {
+
     const { stdout } = await runYtDlp([
       "--dump-single-json",
       "--skip-download",
@@ -112,51 +215,93 @@ app.post("/api/subtitles", async (req, res) => {
 
     const info = JSON.parse(stdout);
 
-    const manual = Object.keys(info.subtitles || {}).map(lang => ({
+    const manual = Object.keys(
+      info.subtitles || {}
+    ).map(lang => ({
       lang,
-      name: info.subtitles[lang]?.[0]?.name || lang,
+      name:
+        info.subtitles[lang]?.[0]?.name ||
+        lang,
       type: "manual"
     }));
 
-    const automatic = Object.keys(info.automatic_captions || {}).map(lang => ({
+    const automatic = Object.keys(
+      info.automatic_captions || {}
+    ).map(lang => ({
       lang,
-      name: info.automatic_captions[lang]?.[0]?.name || lang,
+      name:
+        info.automatic_captions[lang]?.[0]?.name ||
+        lang,
       type: "auto"
     }));
 
-    // Manual captions first. Duplicate language entries are removed.
+    // Manual captions first.
+    // Duplicate languages are removed.
+
     const seen = new Set();
-    const tracks = [...manual, ...automatic].filter(t => {
-      if (seen.has(t.lang)) return false;
+
+    const tracks = [
+      ...manual,
+      ...automatic
+    ].filter(t => {
+
+      if (seen.has(t.lang)) {
+        return false;
+      }
+
       seen.add(t.lang);
       return true;
     });
 
     res.json({
-      title: info.title || "YouTube video",
-      thumbnail: info.thumbnail || null,
-      duration: info.duration || null,
+      title:
+        info.title ||
+        "YouTube video",
+
+      thumbnail:
+        info.thumbnail ||
+        null,
+
+      duration:
+        info.duration ||
+        null,
+
       tracks
     });
+
   } catch (err) {
+
     console.error(err);
-    res.status(500).json({ error: err.message || "Subtitle мэдээлэл авч чадсангүй." });
+
+    res.status(500).json({
+      error:
+        err.message ||
+        "Subtitle мэдээлэл авч чадсангүй."
+    });
   }
 });
-// ================================
+
+
+// =================================
 // VIDEO INFO API
-// ================================
+// =================================
 
 app.post("/api/video-info", async (req, res) => {
-  const url = String(req.body?.url || "").trim();
+
+  const url = String(
+    req.body?.url || ""
+  ).trim();
 
   if (!isYouTubeUrl(url)) {
+
     return res.status(400).json({
-      error: "Зөвхөн YouTube-ийн линк оруулна уу."
+      error:
+        "Зөвхөн YouTube-ийн линк оруулна уу."
     });
   }
 
   try {
+
     const { stdout } = await runYtDlp([
       "--dump-single-json",
       "--skip-download",
@@ -168,42 +313,76 @@ app.post("/api/video-info", async (req, res) => {
     const info = JSON.parse(stdout);
 
     const qualities = [
-      { value: "best", label: "Best available" },
-      { value: "1080", label: "1080p" },
-      { value: "720", label: "720p" },
-      { value: "480", label: "480p" },
-      { value: "360", label: "360p" }
+      {
+        value: "best",
+        label: "Best available"
+      },
+      {
+        value: "1080",
+        label: "1080p"
+      },
+      {
+        value: "720",
+        label: "720p"
+      },
+      {
+        value: "480",
+        label: "480p"
+      },
+      {
+        value: "360",
+        label: "360p"
+      }
     ];
 
     res.json({
-      title: info.title || "YouTube video",
-      thumbnail: info.thumbnail || null,
-      duration: info.duration || null,
+      title:
+        info.title ||
+        "YouTube video",
+
+      thumbnail:
+        info.thumbnail ||
+        null,
+
+      duration:
+        info.duration ||
+        null,
+
       qualities
     });
 
   } catch (err) {
+
     console.error(err);
 
     res.status(500).json({
-      error: err.message || "Видео мэдээлэл авч чадсангүй."
+      error:
+        err.message ||
+        "Видео мэдээлэл авч чадсангүй."
     });
   }
 });
 
 
-// ================================
+// =================================
 // VIDEO DOWNLOAD API
-// ================================
+// =================================
 
 app.post("/api/download-video", async (req, res) => {
 
-  const url = String(req.body?.url || "").trim();
-  const quality = String(req.body?.quality || "best");
+  const url = String(
+    req.body?.url || ""
+  ).trim();
+
+  const quality = String(
+    req.body?.quality || "best"
+  );
 
   if (!isYouTubeUrl(url)) {
+
     return res.status(400).json({
-      error: "Зөвхөн YouTube-ийн линк оруулна уу."
+      error:
+        "Зөвхөн YouTube-ийн линк оруулна уу."
     });
   }
 
@@ -216,13 +395,18 @@ app.post("/api/download-video", async (req, res) => {
   ];
 
   if (!allowedQualities.includes(quality)) {
+
     return res.status(400).json({
-      error: "Буруу видео чанар."
+      error:
+        "Буруу видео чанар."
     });
   }
 
   const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "yt-video-")
+    path.join(
+      os.tmpdir(),
+      "yt-video-"
+    )
   );
 
   const outputTemplate = path.join(
@@ -235,6 +419,7 @@ app.post("/api/download-video", async (req, res) => {
     let format;
 
     // Best quality
+
     if (quality === "best") {
 
       format =
@@ -243,16 +428,17 @@ app.post("/api/download-video", async (req, res) => {
     } else {
 
       // Selected quality or lower
+
       format =
         `bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${quality}][ext=mp4]/best`;
     }
-
 
     await runYtDlp([
       "--no-warnings",
       "--no-playlist",
 
       // Merge video + audio into MP4
+
       "--merge-output-format",
       "mp4",
 
@@ -265,34 +451,37 @@ app.post("/api/download-video", async (req, res) => {
       url
     ]);
 
-
     // Find downloaded MP4
-    const files = fs.readdirSync(tempDir)
+
+    const files = fs
+      .readdirSync(tempDir)
       .filter(file =>
-        file.toLowerCase().endsWith(".mp4")
+        file
+          .toLowerCase()
+          .endsWith(".mp4")
       );
 
-
     if (!files.length) {
+
       throw new Error(
         "Видео файл үүссэнгүй."
       );
     }
-
 
     const videoPath = path.join(
       tempDir,
       files[0]
     );
 
-
     // Send video to browser
+
     res.download(
       videoPath,
       files[0],
-      (err) => {
+      err => {
 
         // Delete temporary folder
+
         fs.rmSync(
           tempDir,
           {
@@ -302,6 +491,7 @@ app.post("/api/download-video", async (req, res) => {
         );
 
         if (err) {
+
           console.error(
             "Download error:",
             err
@@ -329,22 +519,59 @@ app.post("/api/download-video", async (req, res) => {
     });
   }
 });
+
+
+// =================================
+// SUBTITLE DOWNLOAD API
+// =================================
+
 app.post("/api/download", async (req, res) => {
-  const url = String(req.body?.url || "").trim();
-  const lang = String(req.body?.lang || "").trim();
-  const format = req.body?.format === "txt" ? "txt" : "srt";
+
+  const url = String(
+    req.body?.url || ""
+  ).trim();
+
+  const lang = String(
+    req.body?.lang || ""
+  ).trim();
+
+  const format =
+    req.body?.format === "txt"
+      ? "txt"
+      : "srt";
 
   if (!isYouTubeUrl(url)) {
-    return res.status(400).json({ error: "Зөвхөн YouTube-ийн линк оруулна уу." });
-  }
-  if (!/^[a-zA-Z0-9._-]+$/.test(lang)) {
-    return res.status(400).json({ error: "Буруу хэлний код." });
+
+    return res.status(400).json({
+      error:
+        "Зөвхөн YouTube-ийн линк оруулна уу."
+    });
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-sub-"));
-  const outputTemplate = path.join(tempDir, "%(title)s.%(ext)s");
+  if (
+    !/^[a-zA-Z0-9._-]+$/.test(lang)
+  ) {
+
+    return res.status(400).json({
+      error:
+        "Буруу хэлний код."
+    });
+  }
+
+  const tempDir = fs.mkdtempSync(
+    path.join(
+      os.tmpdir(),
+      "yt-sub-"
+    )
+  );
+
+  const outputTemplate = path.join(
+    tempDir,
+    "%(title)s.%(ext)s"
+  );
 
   try {
+
     const { stdout } = await runYtDlp([
       "--dump-single-json",
       "--skip-download",
@@ -354,66 +581,164 @@ app.post("/api/download", async (req, res) => {
     ]);
 
     const info = JSON.parse(stdout);
-    const title = cleanTitle(info.title);
 
-    // Prefer requested language. yt-dlp can download both manually and auto-generated captions.
+    const title = cleanTitle(
+      info.title
+    );
+
+    // Prefer requested language.
+    // yt-dlp can download both manual
+    // and auto-generated captions.
+
     await runYtDlp([
       "--skip-download",
       "--no-warnings",
       "--no-playlist",
       "--write-subs",
       "--write-auto-subs",
-      "--sub-langs", lang,
-      "--sub-format", "vtt",
-      "--output", outputTemplate,
+      "--sub-langs",
+      lang,
+      "--sub-format",
+      "vtt",
+      "--output",
+      outputTemplate,
       url
     ]);
 
-    const candidates = fs.readdirSync(tempDir)
-      .filter(f => f.endsWith(".vtt"))
-      .map(f => path.join(tempDir, f));
+    const candidates = fs
+      .readdirSync(tempDir)
+      .filter(
+        f => f.endsWith(".vtt")
+      )
+      .map(
+        f => path.join(
+          tempDir,
+          f
+        )
+      );
 
     if (!candidates.length) {
-      throw new Error("Энэ хэл дээр хадмал олдсонгүй.");
+
+      throw new Error(
+        "Энэ хэл дээр хадмал олдсонгүй."
+      );
     }
 
-    const vttPath = candidates[0];
-    const vtt = fs.readFileSync(vttPath, "utf8");
+    const vttPath =
+      candidates[0];
+
+    const vtt =
+      fs.readFileSync(
+        vttPath,
+        "utf8"
+      );
 
     let content;
     let contentType;
     let filename;
 
     if (format === "txt") {
-      content = vttToSrt(vtt)
-        .replace(/^\d+\r?\n/gm, "")
-        .replace(/^\d{2}:\d{2}:\d{2},\d{3} --> .*$/gm, "")
-        .replace(/<[^>]*>/g, "")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim() + "\n";
-      contentType = "text/plain; charset=utf-8";
-      filename = `${title}.${lang}.txt`;
+
+      content =
+        vttToSrt(vtt)
+          .replace(
+            /^\d+\r?\n/gm,
+            ""
+          )
+          .replace(
+            /^\d{2}:\d{2}:\d{2},\d{3} --> .*$/gm,
+            ""
+          )
+          .replace(
+            /<[^>]*>/g,
+            ""
+          )
+          .replace(
+            /\n{3,}/g,
+            "\n\n"
+          )
+          .trim() +
+        "\n";
+
+      contentType =
+        "text/plain; charset=utf-8";
+
+      filename =
+        `${title}.${lang}.txt`;
+
     } else {
-      content = vttToSrt(vtt);
-      contentType = "application/x-subrip; charset=utf-8";
-      filename = `${title}.${lang}.srt`;
+
+      content =
+        vttToSrt(vtt);
+
+      contentType =
+        "application/x-subrip; charset=utf-8";
+
+      filename =
+        `${title}.${lang}.srt`;
     }
 
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader(
+      "Content-Type",
+      contentType
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+
     res.send(content);
+
   } catch (err) {
+
     console.error(err);
-    res.status(500).json({ error: err.message || "Subtitle татаж чадсангүй." });
+
+    res.status(500).json({
+      error:
+        err.message ||
+        "Subtitle татаж чадсангүй."
+    });
+
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    fs.rmSync(
+      tempDir,
+      {
+        recursive: true,
+        force: true
+      }
+    );
   }
 });
 
+
+// =================================
+// FRONTEND
+// =================================
+
 app.get("*splat", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+
+  res.sendFile(
+    path.join(
+      PUBLIC_DIR,
+      "index.html"
+    )
+  );
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Subly running on port ${PORT}`);
-});
+
+// =================================
+// START SERVER
+// =================================
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      `Subly running on port ${PORT}`
+    );
+  }
+);
