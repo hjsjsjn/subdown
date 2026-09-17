@@ -112,7 +112,7 @@ function runYtDlp(args) {
 
     child.on("close", (code) => {
       if (code === 0) {
-        resolve(stdout);
+        resolve({ stdout, stderr });
       } else {
         reject(
           new Error(
