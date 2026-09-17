@@ -40,14 +40,54 @@ function runYtDlp(args) {
     const providerScript =
       "/opt/bgutil-ytdlp-pot-provider/server/build/generate_once.js";
 
+    // Render Secret File is read-only, so copy it to /tmp
+    const secretCookieFile = "/etc/secrets/cookies.txt";
+    const writableCookieFile = path.join(
+      os.tmpdir(),
+      "subly-cookies.txt"
+    );
+
+    try {
+      // Copy cookies only once.
+      // This allows yt-dlp to update the writable copy when needed.
+      if (
+        fs.existsSync(secretCookieFile) &&
+        !fs.existsSync(writableCookieFile)
+      ) {
+        fs.copyFileSync(
+          secretCookieFile,
+          writableCookieFile
+        );
+      }
+    } catch (err) {
+      reject(
+        new Error(
+          `Failed to prepare cookies: ${err.message}`
+        )
+      );
+      return;
+    }
+
     const finalArgs = [
       "--verbose",
+
+      // YouTube JavaScript runtime
       "--js-runtimes",
       "deno",
+
+      // YouTube cookies
+      ...(fs.existsSync(writableCookieFile)
+        ? ["--cookies", writableCookieFile]
+        : []),
+
+      // PO Token Provider
       "--extractor-args",
       `youtubepot-bgutilscript:script_path=${providerScript}`,
+
+      // YouTube client
       "--extractor-args",
       "youtube:player-client=mweb",
+
       ...args
     ];
 
@@ -76,7 +116,9 @@ function runYtDlp(args) {
       } else {
         reject(
           new Error(
-            stderr || stdout || `yt-dlp exited with code ${code}`
+            stderr ||
+              stdout ||
+              `yt-dlp exited with code ${code}`
           )
         );
       }
