@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subly — YouTube Subtitle Downloader</title>
+  <link rel="stylesheet" href="\style.css">
+</head>
+<body>
+  <main class="container">
+    <section class="hero">
+      <div class="logo">Subly</div>
+      <h1>YouTube subtitle татах</h1>
+      <p>Видеоныхоо линкийг оруулаад хүссэн хэл дээрх хадмалаа сонгон татна.</p>
+
+      <form id="searchForm" class="search">
+        <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" required>
+        <button id="findBtn" type="submit">Хайх</button>
+      </form>
+
+      <p id="error" class="error"></p>
+    </section>
+
+    <section id="result" class="result hidden">
+      <div class="video-card">
+        <img id="thumb" alt="">
+        <div>
+          <h2 id="title"></h2>
+          <span id="duration" class="muted"></span>
+        </div>
+      </div>
+            <!-- Video Download -->
+      <div class="video-download-panel">
+        <div class="video-download-title">
+          <div>
+            <h3>Видео татах</h3>
+            <p>Видео чанараа сонгоод татна.</p>
+          </div>
+        </div>
+
+        <div class="video-download-controls">
+          <select id="videoQuality">
+            <option value="best">Best available</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+            <option value="360">360p</option>
+          </select>
+
+          <button id="videoDownloadBtn">
+            Видео татах
+          </button>
+        </div>
+      </div>
+      <div id="downloadPanel" class="download-panel hidden">
+        <div>
+          <strong id="selectedLanguage"></strong>
+          <span class="muted"> хадмал сонгогдлоо</span>
+        </div>
+        <div class="format">
+          <select id="format">
+            <option value="srt">SRT — subtitle файл</option>
+            <option value="txt">TXT — энгийн текст</option>
+          </select>
+          <button id="downloadBtn">Татах</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <h3>Хадмалын хэл сонгох</h3>
+        <input id="languageSearch" type="search" placeholder="Хэл хайх...">
+      </div>
+
+      <div id="tracks" class="tracks"></div>
+
+      
+    </section>
+
+    <footer>
+      <span>Subly</span>
+      <span>•</span>
+      <span>YouTube subtitle tool</span>
+    </footer>
+  </main>
+  <script src="\script.js"></script>
+</body>
+</html>
