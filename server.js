@@ -414,8 +414,6 @@ app.get("*splat", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Subly running on port ${PORT}`);
 });
