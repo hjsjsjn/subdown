@@ -7,29 +7,40 @@ RUN apt-get update && \
     python3 \
     python3-venv \
     ca-certificates \
-    curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp
-RUN python3 -m venv /opt/yt-dlp && \
-    /opt/yt-dlp/bin/pip install --no-cache-dir -U yt-dlp && \
-    ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp
+# Create Python virtual environment
+RUN python3 -m venv /opt/yt-dlp
 
-# Install bgutil yt-dlp PO Token plugin
-RUN python3 -m pip install \
-    --no-cache-dir \
-    --target=/opt/yt-dlp-plugins \
-    bgutil-ytdlp-pot-provider
+# Install yt-dlp + EJS support
+RUN /opt/yt-dlp/bin/pip install --no-cache-dir -U "yt-dlp[default]"
 
-ENV YTDLP_PLUGIN_DIR=/opt/yt-dlp-plugins
+# Make yt-dlp available globally
+RUN ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp
+
+# Download bgutil PO Token Provider
+RUN git clone --depth 1 \
+    https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
+    /opt/bgutil-ytdlp-pot-provider
+
+# Install provider server dependencies
+RUN cd /opt/bgutil-ytdlp-pot-provider/server && \
+    npm ci && \
+    npx tsc
+
+# Install provider plugin into yt-dlp plugin directory
+RUN mkdir -p /root/yt-dlp-plugins/bgutil-ytdlp-pot-provider && \
+    cp -r /opt/bgutil-ytdlp-pot-provider/plugin/* \
+    /root/yt-dlp-plugins/bgutil-ytdlp-pot-provider/
 
 WORKDIR /app
 
-# Node dependencies
+# Install Node dependencies
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Application
+# Copy Subly
 COPY . .
 
 ENV PORT=3000
