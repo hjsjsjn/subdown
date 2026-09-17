@@ -42,6 +42,8 @@ function runYtDlp(args) {
 
     const finalArgs = [
       "--verbose",
+      "--js-runtimes",
+      "deno",
       "--extractor-args",
       `youtubepot-bgutilscript:script_path=${providerScript}`,
       "--extractor-args",
