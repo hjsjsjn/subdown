@@ -38,60 +38,69 @@ function isYouTubeUrl(value) {
 
 function runYtDlp(args) {
   return new Promise((resolve, reject) => {
+    const secretCookieFile = "/etc/secrets/cookies.txt";
+    const writableCookieFile = path.join(
+      os.tmpdir(),
+      "subly-cookies.txt"
+    );
 
-    // Render Secret File ашиглаж байгаа үед
-    // /etc/secrets/cookies.txt файлыг автоматаар ашиглана.
-    // cookies.txt файлыг GitHub repository-д хийх шаардлагагүй.
-    const cookieFile = "/etc/secrets/cookies.txt";
+    let finalArgs = [...args];
 
-    if (fs.existsSync(cookieFile)) {
-      args = ["--cookies", cookieFile, ...args];
+    if (fs.existsSync(secretCookieFile)) {
+      try {
+        fs.copyFileSync(
+          secretCookieFile,
+          writableCookieFile
+        );
+
+        finalArgs = [
+          "--cookies",
+          writableCookieFile,
+          ...finalArgs
+        ];
+      } catch (err) {
+        reject(
+          new Error(
+            "Cookie файл ашиглах үед алдаа гарлаа: " +
+            err.message
+          )
+        );
+        return;
+      }
     }
 
-    const child = spawn("yt-dlp", args, {
+    const child = spawn("yt-dlp", finalArgs, {
       windowsHide: true
     });
 
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", d => {
-      stdout += d.toString();
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
     });
 
-    child.stderr.on("data", d => {
-      stderr += d.toString();
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
     });
 
-    child.on("error", err => {
-      if (err.code === "ENOENT") {
+    child.on("error", (err) => {
+      reject(err);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
         reject(
           new Error(
-            "yt-dlp суусангүй байна. README.md дээрх зааврыг дагана уу."
+            stderr || stdout || `yt-dlp exited with code ${code}`
           )
         );
-      } else {
-        reject(err);
-      }
-    });
-
-    child.on("close", code => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            stderr.trim() || "yt-dlp алдаа өглөө."
-          )
-        );
-      } else {
-        resolve({
-          stdout,
-          stderr
-        });
       }
     });
   });
 }
-
 
 // =================================
 // CLEAN TITLE
